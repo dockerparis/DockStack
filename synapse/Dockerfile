@@ -5,6 +5,8 @@ RUN apt-get update && \
 	gem install synapse && \
 	git clone https://github.com/lavoiesl/bash-templater /bash-templater
 
+ADD haproxy.cfg /etc/haproxy/haproxy.cfg
+
 ADD run.sh /run.sh
 RUN chmod +x /run.sh
 

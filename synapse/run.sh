@@ -24,5 +24,5 @@ do
 done
 
 cat /conf.yml
-service haproxy start
+haproxy -f /etc/haproxy/haproxy.cfg &
 synapse -c /conf.yml
