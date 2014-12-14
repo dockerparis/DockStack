@@ -174,3 +174,4 @@ echo '{}' | jq "$JQ_FILTERS" > /config.json
 echo "Config: "
 cat /config.json
 
+synapse -c /conf.yml
