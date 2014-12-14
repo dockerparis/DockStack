@@ -19,8 +19,10 @@ do
 		TYPE=tcp
 	fi
 	
-	. /bash-templater/templater.sh /types/${TYPE}.yml.tpl >> conf.yml
+	. /bash-templater/templater.sh /types/${TYPE}.yml.tpl >> /conf.yml
 	shift
 done
 
-synapse -c conf.yml
+cat /conf.yml
+service haproxy start
+synapse -c /conf.yml
