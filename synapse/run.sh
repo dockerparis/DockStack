@@ -56,10 +56,11 @@ function init {
     FILTERS+=(".haproxy.do_socket=false")
     FILTERS+=(".haproxy.bind_address=\"0.0.0.0\"")
 
-    set_multiple ".haproxy.global" "daemon\nuser haproxy\ngroup haproxy\nmaxconn 4096\nlog     127.0.0.1 local0\nlog     127.0.0.1 local1 notice\n"
-#stats   socket /var/haproxy/stats.sock mode 666 level admin\n"
+    FILTERS+=(".haproxy.extra_sections={}")
+    FILTERS+=(".haproxy.extra_sections={}")
 
-    set_multiple ".haproxy.defaults" "log      global\noption   dontlognull\nmaxconn  2000\nretries  3\ntimeout  connect 5s\ntimeout  client  1m\ntimeout  server  1m\noption   redispatch\nbalance  roundrobin"
+    set_multiple ".haproxy.global" "daemon\nuser haproxy\ngroup haproxy\nmaxconn 4096\nlog     127.0.0.1 local0\nlog     127.0.0.1 local1 notice\n"
+    set_multiple ".haproxy.defaults" "log global\noption dontlognull\nmaxconn 2000\nretries 3\ntimeout connect 5s\ntimeout client 1m\ntimeout server 1m\noption redispatch\nbalance roundrobin"
     
     FILTERS+=(".services={}")
 }
@@ -84,17 +85,17 @@ function create_zk_discovery {
     local NAME="$1"
     local DISCOVERY_PATH="$2"
 
-    FILTERS+=(".services.$NAME.haproxy.discovery.method=\"zookeeper\"")
-    FILTERS+=(".services.$NAME.haproxy.discovery.path=\"$DISCOVERY_PATH\"")
-    FILTERS+=(".services.$NAME.haproxy.discovery.hosts=[]")
-    set_zk_hosts ".services.$NAME.haproxy.discovery.hosts"
+    FILTERS+=(".services.$NAME.discovery.method=\"zookeeper\"")
+    FILTERS+=(".services.$NAME.discovery.path=\"${ZK_PATH}${DISCOVERY_PATH}\"")
+    FILTERS+=(".services.$NAME.discovery.hosts=[]")
+    set_zk_hosts ".services.$NAME.discovery.hosts"
 }
 
 function create_discovery {
     local NAME="$1"
     local DISCOVERY_PATH="$2"
 
-    FILTERS+=(".services.$NAME.haproxy.discovery={}")
+    FILTERS+=(".services.$NAME.discovery={}")
     case $DISCOVERY in
       zk)
         create_zk_discovery "$NAME" "$DISCOVERY_PATH"
@@ -113,7 +114,7 @@ function create_service {
     FILTERS+=(".services.$NAME={}")
     FILTERS+=(".services.$NAME.haproxy={}")
     FILTERS+=(".services.$NAME.haproxy.port=$PORT")
-    FILTERS+=(".services.$NAME.haproxy.server_options=\"check inter ${CHECK_INTERVAL}s rise $C_RISE fail $C_FAIL\"")
+#    FILTERS+=(".services.$NAME.haproxy.server_options=\"check inter ${CHECK_INTERVAL}s rise $C_RISE fail $C_FAIL\"")
 
     create_discovery "$NAME" "$SERVICE"
 }
@@ -121,7 +122,7 @@ declare -a FILTERS;
 
 init
 
-OPTS=`getopt -o "s:m:k:a:" -l "set:,multiline:,hash:,array:,tcp:,http:" -- "$@"`
+OPTS=`getopt -o "s:m:k:a:" -l "set:,multiline:,hash:,array:,tcp:,http:,mysql:" -- "$@"`
 
 if [ $? != 0 ]; then error "Error parsing arguments"; fi
 
@@ -155,6 +156,15 @@ while true ; do
       create_service "$NAME" "$SERVICE" "$PORT"
       set_multiple ".services.$NAME.haproxy.listen" "mode http\noption httpchk $CHECK\nhttp-check expect string $RESPONSE"
       shift 2;;
+    --mysql)
+      NAME=$(split "$2" 1)
+      SERVICE=$(split "$2" 2)
+      PORT=$(split "$2" 3)
+      USERNAME=$(split "$2" 4)
+
+      create_service "$NAME" "$SERVICE" "$PORT"
+      set_multiple ".services.$NAME.haproxy.listen" "mode tcp\noption mysql-check user $USERNAME"
+      shift 2;;
     --tcp)
       NAME=$(split "$2" 1)
       SERVICE=$(split "$2" 2)
@@ -174,4 +184,8 @@ echo '{}' | jq "$JQ_FILTERS" > /config.json
 echo "Config: "
 cat /config.json
 
-synapse -c /conf.yml
+/haproxy.sh start &
+synapse -c /config.json
+#sleep 2
+#cat /etc/haproxy/haproxy.cfg
+#wait
