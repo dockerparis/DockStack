@@ -10,7 +10,31 @@ function error {
 }
 
 function help {
-    echo "TBD"
+    echo >&2 <<< EOF
+Usage: docker run -e [ENVIRONMENT_VARIABLES] synapse [ARGUMENTS]
+
+Environment variables:
+    DISCOVERY=zk		Discovery type
+    CHECK_INTERVAL=2		Interval between each heartbeat check
+    C_RISE=3			The number of checks the server must pass to be declared operational
+    C_FAIL=2			The number of checks the server must fail to be declared dead
+
+    ZK_PATH=/nerve/services	The zookeeper base discovery path 
+    ETCD_PATH=/nerve services   The etcd base discovery path
+   
+    ETCD_PORT=4001		The etcd port
+
+    ZK_HOSTS			Comma separated list of zookeeper hosts
+
+Options:
+    -s				
+    -m
+    -k
+    -a
+    --tcp			TCP server [name:service_name:port]
+    --http			HTTP server [name:service_name:port:healthcheck_url:healthcheck_response]
+    --mysql			MySQL server [name:service_name:port:healthcheck_user]
+EOF
     exit 1
 }
 
@@ -19,7 +43,7 @@ function check_env_vars {
 
     CHECK_INTERVAL=${CHECK_INTERVAL:-2}
 
-    C_TIMEOUT=${C_TIMEOUT:-0.2}
+#    C_TIMEOUT=${C_TIMEOUT:-0.2}
     C_RISE=${C_RISE:-3}
     C_FAIL=${C_FAIL:-2}
 
@@ -186,6 +210,3 @@ cat /config.json
 
 /haproxy.sh start &
 synapse -c /config.json
-#sleep 2
-#cat /etc/haproxy/haproxy.cfg
-#wait
