@@ -15,17 +15,17 @@ You can easily setup Zookeeper on your hosts using https://registry.hub.docker.c
 ####MySQL
 Any other service will work
 
-1. Spawn a MySQL container
+- Spawn a MySQL container
 ```
 host1 $ docker run -d --name mysql -p :3306 -e MYSQL_ROOT_PASSWORD=test mysql
 ```
-2. Create an healt-check user
+- Create an healt-check user
 ```
 host1 $ docker exec -ti mysql /bin/bash
 # mysql -u root -p
 mysql> INSERT INTO mysql.user (Host,User) values ('%', 'haproxy_check'); FLUSH PRIVILEGES;
 ```
-3. Temporary fix to avoid the following error `ERROR 1129 (HY000): Host '172.17.42.1' is blocked because of many connection errors; unblock with 'mysqladmin flush-hosts'`
+- Temporary fix to avoid the following error `ERROR 1129 (HY000): Host '172.17.42.1' is blocked because of many connection errors; unblock with 'mysqladmin flush-hosts'`
 ```
 # mysqladmin -u root -p flush-hosts
 ```
