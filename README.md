@@ -21,12 +21,7 @@ host1 $ docker run -d --name mysql -p :3306 -e MYSQL_ROOT_PASSWORD=test mysql
 ```
 - Create an healt-check user
 ```
-host1 $ docker exec -ti mysql /bin/bash
-# mysql -u root -p -e 'CREATE USER 'haproxy_check'@'%'; FLUSH PRIVILEGES;'
-```
-- Temporary fix to avoid the following error `ERROR 1129 (HY000): Host '172.17.42.1' is blocked because of many connection errors; unblock with 'mysqladmin flush-hosts'`
-```
-# mysqladmin -u root -p flush-hosts
+host1 $ docker exec -ti mysql mysql -u root -p -e 'CREATE USER 'haproxy_check'@'%'; FLUSH PRIVILEGES;'
 ```
 ####Nerve
 ```
@@ -62,7 +57,6 @@ The connection is proxified transparently by HAProxy
 ##Authors
 - [Alessandro Siragusa](https://github.com/asiragusa)
 - [Yves-Marie Saout](https://github.com/dw33z1lP)
-- [Laurent Vergnaud](https://github.com/laurentvergnaud)
 
 ##Special thanks
 To [Jérôme Petazzoni](https://github.com/jpetazzo) for the great idea!
