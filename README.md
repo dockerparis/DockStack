@@ -31,7 +31,7 @@ host1 $ docker run \
 	-v /lib64/libdevmapper.so.1.02:/lib/libdevmapper.so.1.02:ro \
 	-v /var/run/docker.sock:/var/run/docker.sock \
 	-e SERVICE_HOST=176.31.235.180 \
-	nerve \
+	asiragusa/nerve \
 	-d zk://<zookeeper_hosts comma separated>/nerve \
 	-s mysql:tcp:mysql:3306:/test
 ```
@@ -41,7 +41,7 @@ host1 $ docker run \
 host2 $ docker run \
 	-ti --rm \ # -d
 	--name synapse
-	synapse
+	asiragusa/synapse
 	-d zk://<zookeeper_hosts comma separated>/nerve \
 	-s mysql:mysql:/test
 ```
