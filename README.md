@@ -54,6 +54,9 @@ host2 $ docker run -ti --rm --link synapse:db mysql:latest mysql -u root -h db -
 
 The connection is proxified transparently by HAProxy
 
+##TODO
+Create more service config files and examples ready to use
+
 ##Authors
 - [Alessandro Siragusa](https://github.com/asiragusa)
 - [Yves-Marie Saout](https://github.com/dw33z1lP)
