@@ -1,6 +1,5 @@
 #!/bin/bash
 
-function join { local IFS="$1"; shift; echo "$*"; }
 function split { echo $1 | cut -d : -f $2; }
 
 function error {
@@ -9,111 +8,109 @@ function error {
 }
 
 function help {
-    echo "TBD"
+    echo >&2 <<< EOF
+Usage: docker run -e SERVICE_HOST=<host_ip> [VOLUMES] nerve [ARGUMENTS]
+
+Arguments:
+  -s, --service                 Service
+                                  format: service_name:service_type:service_port:discovery_path | service_name:service_type:container_name:container_port:discovery_path
+  -d, --discovery               Discovery
+                                  format: <zk|etcd>://<servers comma separated>/<base_path>
+  -r, --raw                     Add a raw jq query to configure dynamically a service
+                                  format: service_name:jq_query
+
+Volumes:
+  To be able to obtain automatically the container port you must share the following volumes with nerve:
+
+  -v /usr/bin/docker:/usr/bin/docker:ro 
+  -v /lib64/libdevmapper.so.1.02:/lib/libdevmapper.so.1.02:ro 
+  -v  /var/run/docker.sock:/var/run/docker.sock
+
+EOF
     exit 1
 }
 
-function check_env_vars {
-    if [ -z "$SERVICE" ]; then error "You must specify a service path"; fi
-    if [ -z "$SERVICE_HOST" ]; then error "You must specify a service host"; fi
-    if [ -z "$SERVICE_PORT" ]; then error "You must specify a service port"; fi
 
-    INSTANCE_ID=${INSTANCE_ID:-nerve}
-    CHECK_INTERVAL=${CHECK_INTERVAL:-2}
-
-    C_TIMEOUT=${C_TIMEOUT:-0.2}
-    C_RISE=${C_RISE:-3}
-    C_FAIL=${C_FAIL:-2}
-
-    ZK_PATH=${ZK_PATH:-/nerve/services/}
-
-    ETCD_PATH=${ETCD_PATH:-/nerve/services/}
-    ETCD_PORT=${ETCD_PORT:-4001}
+function set_reporter {
+    local filter="$1"
+    REPORTER_TYPE=$(echo "$filter" | sed -e 's/:.*$//')
+    
+    case $REPORTER_TYPE in
+       zk)
+         REPORTER='.reporter_type="zookeeper"|.zk_hosts=[]'
+       
+         local hosts=$(echo "$filter" | sed -e 's/zk:\/\///i' -e 's:/.*$::')
+         IFS=',' read -a splitted_hosts <<< "$hosts"
+         local i=0
+         for host in "${splitted_hosts[@]}"
+         do
+           REPORTER=$REPORTER"|.zk_hosts[$i]=\"$host\""
+           i=$((i+1))
+         done
+       
+         local base_path=$(echo "$filter" | sed -e 's/zk:\/\///i' -e 's/^[^/]*//')
+         REPORTER=$REPORTER"|.zk_path=\"$base_path"
+       ;;
+       etcd)
+         local full_host=$(echo "$filter" | sed -e 's/etcd:\/\///i' -e 's:/.*$::')
+         local host=$(split $full_host 1)
+         local port=$(split $full_host 2)
+         local base_path=$(echo "$filter" | sed -e 's/etcd:\/\///i' -e 's/^[^/]*//')
+         REPORTER=".reporter_type=\"etcd\"|.etcd_host=\"$host\"|.etcd_port=$port|.etcd_path=\"$base_path"
+       ;;
+       *)
+         error "Wrong reporter type"
+       ;;
+     esac
 }
 
-function set_name_idx {
-    local NAME=$1
-    if [ ! ${NAMES[$NAME]+_} ]
-    then
-	NAMES[$NAME]=$NAME_IDX
-	FILTERS+=(".services.default.checks[$NAME_IDX]={}")
-	NAME_IDX=$((NAME_IDX+1))
-    fi
-}
-
-function set_zk_hosts {
-    if [ -z "$ZK_HOSTS" ]; then error "No Zookeeper hosts specified"; fi
-
-    local IFS=","
-    local IDX=0
-    read -ra SERVERS <<< "$ZK_HOSTS"
-    for i in "${SERVERS[@]}"
+function process_services {
+    for service in "${SERVICES[@]}"
     do
-        FILTERS+=(".services.default.zk_hosts[$IDX]=\"$i\"")
-        IDX=$((IDX+1))
+      local service_name=$(split $service 1)
+      local service_type=$(split $service 2)
+      local service_port=$(split $service 3)
+      local service_path=$(split $service 4)
+
+      local re='^[0-9]+$'
+      if ! [[ "$service_port" =~ $re ]]
+      then
+         service_port=$(split $(docker port $service_port $service_path) 2)
+         service_path=$(split $service 5)
+      fi
+
+      if [ -z "$service_name" ]; then error "You have to supply a service name"; fi
+      if [ -z "$service_type" ]; then error "You have to supply a service type"; fi
+      if [ -z "$service_port" ]; then error "You have to supply a service port"; fi
+      if [ -z "$service_path" ]; then error "You have to supply a service path"; fi
+         
+      cat "/services/${service_type}.json" | jq ".host=\"$SERVICE_HOST\"|.port=$service_port|${REPORTER}${service_path}\"" > /nerve/${service_name}.json
     done
 }
 
-function init {
-    check_env_vars
+function process_raw {
+    for raw in "${RAW[@]}"
+    do
+     local service_name=$(split $raw 1)
+     local filter=$(echo "$raw" | sed -e 's/^[^:]*://')
 
-    FILTERS+=(".instance_id=\"$INSTANCE_ID\"")
-    FILTERS+=(".services={}")
-    FILTERS+=(".services.default={}")
+     if [ -z "$service_name" ]; then error "You have to supply a service name"; fi
+     if [ -z "$filter" ]; then error "You have to supply a valid filter"; fi
 
-    FILTERS+=(".services.default.host=\"$SERVICE_HOST\"")
-    FILTERS+=(".services.default.port=$SERVICE_PORT")
-    FILTERS+=(".services.default.check_interval=$CHECK_INTERVAL")
-
-    FILTERS+=(".services.default.checks=[]")
+     local new=$(cat "/nerve/${service_name}.json" | jq "$filter")
+     echo "$new" > /nerve/${service_name}.json
+    done
 }
+mkdir -p /nerve
 
-function set_zookeeper {
-    FILTERS+=(".services.default.reporter_type=\"zookeeper\"")
-    FILTERS+=(".services.default.zk_path=\"$ZK_PATH$SERVICE\"")
-    FILTERS+=(".services.default.zk_hosts=[]")
+INSTANCE_ID=${INSTANCE_ID:-nerve}
 
-    set_zk_hosts
-    REPORTER=true
-}
+echo '{}' | jq ".instance_id=\"$INSTANCE_ID\"|.service_conf_dir=\"/nerve\"" > /config.json
 
-function set_etcd {
-    if [ -z "$ETCD_HOST" ]; then error "You must specify an etcd host"; fi
+declare -a SERVICES;
+declare -a RAW;
 
-    FILTERS+=(".services.default.reporter_type=\"etcd\"")
-    FILTERS+=(".services.default.etcd_path=\"$ETCD_PATH$SERVICE\"")
-    FILTERS+=(".services.default.etcd_host=\"$ETCD_HOST\"")
-    FILTERS+=(".services.default.etcd_port=$ETCD_PORT")
-
-    REPORTER=true
-}
-
-function set_filter {
-    local NAME=$(split $1 1)
-    local OPTION_NAME=$(split $1 2)
-    local VALUE=$(split $1 3)
-
-    set_name_idx $NAME
-    IDX=${NAMES[$NAME]}
-
-    FILTERS+=(".services.default.checks[$IDX].$OPTION_NAME=\"$VALUE\"")
-}
-
-function set_standard_filter {
-    set_filter "$1:name:$1"
-    set_filter "$1:type:$1"
-    set_filter "$1:timeout:$C_TIMEOUT"
-    set_filter "$1:rise:$C_RISE"
-    set_filter "$1:fail:$C_FAIL"
-}
-
-NAME_IDX=0
-declare -A NAMES;
-declare -a FILTERS;
-
-init
-
-OPTS=`getopt -o "c:o:" -l "http:,tcp,rabbitmq:,zk,etcd" -- "$@"`
+OPTS=`getopt -o "s:r:d:" -l "service:,raw:,discovery:" -- "$@"`
 
 if [ $? != 0 ]; then error "Error parsing arguments"; fi
 
@@ -121,46 +118,33 @@ eval set -- "$OPTS"
 
 while true ; do
   case $1 in
-    -c)	
-      NAME=$(split $2 1)
-      TYPE=$(split $2 2)
-      set_filter "$NAME:name:$NAME"
-      set_filter "$NAME:type:$TYPE"
+    -s|--service)
+      SERVICES+=($2)
       shift 2;;
-    -o)
-      set_filter $2
+    -r|--raw)
+      RAW+=($2)
       shift 2;;
-    --zk)
-      set_zookeeper
-      shift;;
-    --etcd)
-      set_etcd
-      shift;;
-    --tcp)
-      set_standard_filter "tcp"
-      shift;;
-    --http)
-      set_standard_filter "http"
-      set_filter "http:uri:$2"
-      shift 2;;
-    --rabbitmq)
-      set_standard_filter "rabbitmq"
-      USERNAME=$(split $2 1)
-      PASSWORD=$(split $2 2)
-      set_filter "rabbitmq:username:$USERNAME"
-      set_filter "rabbitmq:password:$PASSWORD"
+    -d|--discovery)
+      set_reporter $2
       shift 2;;
     --) shift; break;;
   esac
 done
 
-if [ -z "$REPORTER" ]; then error "You have to set at least one reporter"; fi
+if [ -z "$REPORTER" ]; then error "You have to set a service discovery"; fi
 
-JQ_FILTERS=$(join "|" "${FILTERS[@]}")
+if [ -z "$SERVICE_HOST" ]; then error "You have to set the service host"; fi
 
-echo '{}' | jq $JQ_FILTERS > /config.json
+process_services
+process_raw
 
 echo "Config: "
 cat /config.json
+
+for service in /nerve/*
+do
+    echo "$service:"
+    cat $service
+done
 
 nerve -c /config.json

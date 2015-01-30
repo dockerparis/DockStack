@@ -1,0 +1,12 @@
+{
+  "check_interval": 2,
+  "checks": [
+    {
+      "name": "tcp",
+      "type": "tcp",
+      "timeout": "0.2",
+      "rise": "3",
+      "fail": "2"
+    }
+  ]
+}

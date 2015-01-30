@@ -22,8 +22,7 @@ host1 $ docker run -d --name mysql -p :3306 -e MYSQL_ROOT_PASSWORD=test mysql
 - Create an healt-check user
 ```
 host1 $ docker exec -ti mysql /bin/bash
-# mysql -u root -p
-mysql> INSERT INTO mysql.user (Host,User) values ('%', 'haproxy_check'); FLUSH PRIVILEGES;
+# mysql -u root -p -e 'CREATE USER 'haproxy_check'@'%'; FLUSH PRIVILEGES;'
 ```
 - Temporary fix to avoid the following error `ERROR 1129 (HY000): Host '172.17.42.1' is blocked because of many connection errors; unblock with 'mysqladmin flush-hosts'`
 ```
@@ -31,19 +30,31 @@ mysql> INSERT INTO mysql.user (Host,User) values ('%', 'haproxy_check'); FLUSH P
 ```
 ####Nerve
 ```
-host1 $ docker run -ti --rm -e ZK_HOSTS=<zk_hosts,comma-separated> -e SERVICE_PORT=$(docker port mysql | cut -d : -f 2) -e SERVICE_HOST=<HOST_IP> -e SERVICE=path/test nerve --tcp --zk
+host1 $ docker run \
+	-ti --rm \ # -d
+	-v /usr/bin/docker:/usr/bin/docker:ro \
+	-v /lib64/libdevmapper.so.1.02:/lib/libdevmapper.so.1.02:ro \
+	-v /var/run/docker.sock:/var/run/docker.sock \
+	-e SERVICE_HOST=176.31.235.180 \
+	nerve \
+	-d zk://<zookeeper_hosts comma separated>/nerve \
+	-s mysql:tcp:mysql:3306:/test
 ```
 
 ####Synapse
 ```
-host2 $ docker run -ti --rm -e ZK_HOSTS=<zk_hosts,comma-separated> --name synapse synapse --mysql service1:path/test:3306:haproxy_check
+host2 $ docker run \
+	-ti --rm \ # -d
+	--name synapse
+	synapse
+	-d zk://<zookeeper_hosts comma separated>/nerve \
+	-s mysql:mysql:/test
 ```
 
 ####Testing
 Here the magic happens! (Running a mysql image, as it carries by default mysql-client)
 ```
-host2 $ docker run -ti --rm --link synapse:db mysql:latest /bin/bash
-# mysql -u root -h db
+host2 $ docker run -ti --rm --link synapse:db mysql:latest mysql -u root -h db -p
 ```
 
 The connection is proxified transparently by HAProxy

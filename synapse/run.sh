@@ -1,8 +1,6 @@
 #!/bin/bash
 
-function join { local IFS="$1"; shift; echo "$*"; }
 function split { echo $1 | cut -d : -f $2; }
-function get_value { echo $1 | sed -e 's/^[^:]*://i'; }
 
 function error {
     echo "$1" >&2
@@ -11,142 +9,91 @@ function error {
 
 function help {
     echo >&2 <<< EOF
-Usage: docker run -e [ENVIRONMENT_VARIABLES] synapse [ARGUMENTS]
+Usage: docker run synapse [ARGUMENTS]
 
-Environment variables:
-    DISCOVERY=zk		Discovery type
-    CHECK_INTERVAL=2		Interval between each heartbeat check
-    C_RISE=3			The number of checks the server must pass to be declared operational
-    C_FAIL=2			The number of checks the server must fail to be declared dead
+Arguments:
+  -c, --config			Base config file
+  -s, --service			Service
+				  format: service_name:service_type:discovery_path
+  -d, --discovery		Discovery
+				  format: <zk|etcd>://<servers comma separated>/<base_path>
+  -r, --raw			Add a raw jq query to configure dynamically a service
+				  format: service_name:jq_query
 
-    ZK_PATH=/nerve/services	The zookeeper base discovery path 
-    ETCD_PATH=/nerve services   The etcd base discovery path
-   
-    ETCD_PORT=4001		The etcd port
-
-    ZK_HOSTS			Comma separated list of zookeeper hosts
-
-Options:
-    -s				
-    -m
-    -k
-    -a
-    --tcp			TCP server [name:service_name:port]
-    --http			HTTP server [name:service_name:port:healthcheck_url:healthcheck_response]
-    --mysql			MySQL server [name:service_name:port:healthcheck_user]
 EOF
     exit 1
 }
 
-function check_env_vars {
-    DISCOVERY=${DISCOVERY:-zk}
+function set_discovery {
+    local filter="$1"
+    DISCOVERY_TYPE=$(echo "$filter" | sed -e 's/:.*$//')
 
-    CHECK_INTERVAL=${CHECK_INTERVAL:-2}
+    case $DISCOVERY_TYPE in
+       zk)
+         DISCOVERY='.discovery={}|.discovery.method="zookeeper"|.discovery.hosts=[]'
 
-#    C_TIMEOUT=${C_TIMEOUT:-0.2}
-    C_RISE=${C_RISE:-3}
-    C_FAIL=${C_FAIL:-2}
+         local hosts=$(echo "$filter" | sed -e 's/zk:\/\///i' -e 's:/.*$::')
+         IFS=',' read -a splitted_hosts <<< "$hosts"
+         local i=0
+         for host in "${splitted_hosts[@]}"
+         do
+           DISCOVERY=$DISCOVERY"|.discovery.hosts[$i]=\"$host\""
+           i=$((i+1))
+         done
 
-    ZK_PATH=${ZK_PATH:-/nerve/services/}
-
-    ETCD_PATH=${ETCD_PATH:-/nerve/services/}
-    ETCD_PORT=${ETCD_PORT:-4001}
+         local base_path=$(echo "$filter" | sed -e 's/zk:\/\///i' -e 's/^[^/]*//')
+         DISCOVERY=$DISCOVERY"|.discovery.path=\"$base_path"
+       ;;
+       etcd)
+         error "Not yet implemented"
+       ;;
+       *)
+         error "Wrong discovery type"
+       ;;
+     esac
 }
 
-function set_zk_hosts {
-    local DISCOVERY_PATH=$1
 
-    if [ -z "$ZK_HOSTS" ]; then error "No Zookeeper hosts specified"; fi
-
-    local IFS=","
-    local IDX=0
-    read -ra SERVERS <<< "$ZK_HOSTS"
-    for i in "${SERVERS[@]}"
+function process_services {
+    for service in "${SERVICES[@]}"
     do
-        FILTERS+=("${DISCOVERY_PATH}[$IDX]=\"$i\"")
-        IDX=$((IDX+1))
+      local service_name=$(split $service 1)
+      local service_type=$(split $service 2)
+      local service_path=$(split $service 3)
+
+      if [ -z "$service_name" ]; then error "You have to supply a service name"; fi
+      if [ -z "$service_type" ]; then error "You have to supply a service type"; fi
+      if [ -z "$service_path" ]; then error "You have to supply a service path"; fi
+
+      if [ ! -f "/services/${service_type}.json" ]
+      then
+          error "The service ${service_type} does not exist"
+      fi
+
+      cat "/services/${service_type}.json" | jq "${DISCOVERY}${service_path}\"" > /synapse/${service_name}.json
     done
 }
 
-function init {
-    check_env_vars
-
-    FILTERS+=(".haproxy={}")
-    FILTERS+=(".haproxy.reload_command=\"/haproxy.sh reload\"")
-    FILTERS+=(".haproxy.config_file_path=\"/etc/haproxy/haproxy.cfg\"")
-    FILTERS+=(".haproxy.socket_file_path=\"/var/run/haproxy.sock\"")
-    FILTERS+=(".haproxy.do_writes=true")
-    FILTERS+=(".haproxy.do_reloads=true")
-    FILTERS+=(".haproxy.do_socket=false")
-    FILTERS+=(".haproxy.bind_address=\"0.0.0.0\"")
-
-    FILTERS+=(".haproxy.extra_sections={}")
-    FILTERS+=(".haproxy.extra_sections={}")
-
-    set_multiple ".haproxy.global" "daemon\nuser haproxy\ngroup haproxy\nmaxconn 4096\nlog     127.0.0.1 local0\nlog     127.0.0.1 local1 notice\n"
-    set_multiple ".haproxy.defaults" "log global\noption dontlognull\nmaxconn 2000\nretries 3\ntimeout connect 5s\ntimeout client 1m\ntimeout server 1m\noption redispatch\nbalance roundrobin"
-    
-    FILTERS+=(".services={}")
-}
-
-function set_multiple {
-    local KEY="$1"
-    local VALUE=$(echo -e $2)
-    local IDX=0
-    local cr='
-';
-    local IFS=$cr
-    
-    FILTERS+=("$KEY=[]")
-    for option in $VALUE
+function process_raw {
+    for raw in "${RAW[@]}"
     do
-        FILTERS+=("${KEY}[$IDX]=\"$option\"")
-        IDX=$((IDX+1))
+     local service_name=$(split $raw 1)
+     local filter=$(echo "$raw" | sed -e 's/^[^:]*://')
+
+     if [ -z "$service_name" ]; then error "You have to supply a service name"; fi
+     if [ -z "$filter" ]; then error "You have to supply a valid filter"; fi
+
+     local new=$(cat "/synapse/${service_name}.json" | jq "$filter")
+     echo "$new" > /synapse/${service_name}.json
     done
 }
 
-function create_zk_discovery {
-    local NAME="$1"
-    local DISCOVERY_PATH="$2"
+mkdir /synapse
 
-    FILTERS+=(".services.$NAME.discovery.method=\"zookeeper\"")
-    FILTERS+=(".services.$NAME.discovery.path=\"${ZK_PATH}${DISCOVERY_PATH}\"")
-    FILTERS+=(".services.$NAME.discovery.hosts=[]")
-    set_zk_hosts ".services.$NAME.discovery.hosts"
-}
+declare -a SERVICES;
+declare -a RAW;
 
-function create_discovery {
-    local NAME="$1"
-    local DISCOVERY_PATH="$2"
-
-    FILTERS+=(".services.$NAME.discovery={}")
-    case $DISCOVERY in
-      zk)
-        create_zk_discovery "$NAME" "$DISCOVERY_PATH"
-      ;;
-      etcd)
-        error "Etcd not yet implemented"
-      ;;
-    esac
-}
-
-function create_service {
-    local NAME="$1"
-    local SERVICE="$2"
-    local PORT="$3"
-
-    FILTERS+=(".services.$NAME={}")
-    FILTERS+=(".services.$NAME.haproxy={}")
-    FILTERS+=(".services.$NAME.haproxy.port=$PORT")
-#    FILTERS+=(".services.$NAME.haproxy.server_options=\"check inter ${CHECK_INTERVAL}s rise $C_RISE fail $C_FAIL\"")
-
-    create_discovery "$NAME" "$SERVICE"
-}
-declare -a FILTERS;
-
-init
-
-OPTS=`getopt -o "s:m:k:a:" -l "set:,multiline:,hash:,array:,tcp:,http:,mysql:" -- "$@"`
+OPTS=`getopt -o "c:s:d:r:" -l "config:,service:,discovery:,raw:" -- "$@"`
 
 if [ $? != 0 ]; then error "Error parsing arguments"; fi
 
@@ -154,59 +101,45 @@ eval set -- "$OPTS"
 
 while true ; do
   case $1 in
-    -s|--set)
-      KEY=$(split $2 1)
-      VALUE=$(get_value $2)
-      FILTERS+=("$KEY=\"$VALUE\"")
+    -c|--config)
+      if [ ! -f "/config/${2}.json" ]
+      then
+          error "The config file does not exist"
+      fi
+      cp "/config/${2}.json" /config.json
       shift 2;;
-    -m|--multiline)
-      KEY=$(split $2 1)
-      VALUE=$(get_value $2)
-      set_multiple "$KEY" "$VALUE"
+    -s|--service)
+      SERVICES+=($2)
       shift 2;;
-    -k|--hash)
-      FILTERS+=("$2={}")
+    -d|--discovery)
+      set_discovery $2
       shift 2;;
-    -a|--array)
-      FILTERS+=("$2=[]")
-      shift 2;;
-    --http)
-      NAME=$(split "$2" 1)
-      SERVICE=$(split "$2" 2)
-      PORT=$(split "$2" 3)
-      CHECK=$(split "$2" 4)
-      RESPONSE=$(split "$2" 5)
-
-      create_service "$NAME" "$SERVICE" "$PORT"
-      set_multiple ".services.$NAME.haproxy.listen" "mode http\noption httpchk $CHECK\nhttp-check expect string $RESPONSE"
-      shift 2;;
-    --mysql)
-      NAME=$(split "$2" 1)
-      SERVICE=$(split "$2" 2)
-      PORT=$(split "$2" 3)
-      USERNAME=$(split "$2" 4)
-
-      create_service "$NAME" "$SERVICE" "$PORT"
-      set_multiple ".services.$NAME.haproxy.listen" "mode tcp\noption mysql-check user $USERNAME"
-      shift 2;;
-    --tcp)
-      NAME=$(split "$2" 1)
-      SERVICE=$(split "$2" 2)
-      PORT=$(split "$2" 3)
-
-      create_service "$NAME" "$SERVICE" "$PORT"
-      set_multiple ".services.$NAME.haproxy.listen" "mode tcp"
+    -r|--raw)
+      RAW+=($2)
       shift 2;;
     --) shift; break;;
   esac
 done
 
-JQ_FILTERS=$(join "|" "${FILTERS[@]}")
+if [ -z "$DISCOVERY" ]; then error "You have to set the discovery path"; fi
 
-echo '{}' | jq "$JQ_FILTERS" > /config.json
+if [ ! -f "/config.json" ]
+then
+    cp /config/default.json /config.json
+fi
+
+process_services
+process_raw
 
 echo "Config: "
 cat /config.json
 
+for service in /synapse/*
+do
+    echo "$service:"
+    cat $service
+done
+
 /haproxy.sh start &
+
 synapse -c /config.json

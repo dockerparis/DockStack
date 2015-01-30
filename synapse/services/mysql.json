@@ -1,0 +1,10 @@
+{
+  "haproxy": {
+    "port": 3306,
+    "server_options": "check inter 2s rise 3 fall 2",
+    "listen": [
+      "mode tcp",
+      "option mysql-check user haproxy_check"
+    ]
+  }
+}

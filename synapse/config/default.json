@@ -1,0 +1,39 @@
+{
+  "haproxy": {
+    "extra_sections": {
+      "listen stats :8080": [
+        "mode http",
+        "stats enable",
+        "stats uri /",
+        "stats refresh 5s",
+        "stats admin if TRUE",
+        "stats auth admin:password"
+      ]
+    },
+    "bind_address": "0.0.0.0",
+    "defaults": [
+      "log global",
+      "option dontlognull",
+      "maxconn 2000",
+      "retries 3",
+      "timeout connect 5s",
+      "timeout client 1m",
+      "timeout server 1m",
+      "option redispatch",
+      "balance roundrobin"
+    ],
+    "global": [
+      "daemon",
+      "user haproxy",
+      "group haproxy",
+      "maxconn 4096"
+    ],
+    "reload_command": "/haproxy.sh reload",
+    "config_file_path": "/etc/haproxy/haproxy.cfg",
+    "socket_file_path": "/var/run/haproxy.sock",
+    "do_writes": true,
+    "do_reloads": true,
+    "do_socket": false
+  },
+  "service_conf_dir": "/synapse"
+}

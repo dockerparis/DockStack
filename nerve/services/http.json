@@ -1,0 +1,14 @@
+{
+  "checks": [
+    {
+      "fall": 2,
+      "rise": 3,
+      "timeout": 0.2,
+      "uri": "/health",
+      "type": "http",
+      "headers": {},
+      "expect": "OK"
+    }
+  ],
+  "check_interval": 2
+}

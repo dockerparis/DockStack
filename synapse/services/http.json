@@ -1,0 +1,16 @@
+{
+  "haproxy": {
+    "port": 80,
+    "server_options": "check inter 2s rise 3 fall 2",
+    "listen": [
+      "mode http",
+      "option httplog"
+    ],
+    "frontend": [
+    ],
+    "backend": [
+      "option httpchk GET /health HTTP/1.1\\r\\nHost:\\ www",
+      "http-check expect string OK"
+    ]
+  }
+}
