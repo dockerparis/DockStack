@@ -16,7 +16,7 @@ Arguments:
   -s, --service			Service
 				  format: service_name:service_type:discovery_path
   -d, --discovery		Discovery
-				  format: <zk|etcd>://<servers comma separated>/<base_path>
+				  format: \<zk|etcd\>://\<servers comma separated\>/\<base_path\>
   -r, --raw			Add a raw jq query to configure dynamically a service
 				  format: service_name:jq_query
 
