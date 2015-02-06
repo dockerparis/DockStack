@@ -9,13 +9,13 @@ function error {
 
 function help {
     echo >&2 <<< EOF
-Usage: docker run -e SERVICE_HOST=<host_ip> [VOLUMES] nerve [ARGUMENTS]
+Usage: docker run -e SERVICE_HOST=\<host_ip\> [VOLUMES] nerve [ARGUMENTS]
 
 Arguments:
   -s, --service                 Service
                                   format: service_name:service_type:service_port:discovery_path | service_name:service_type:container_name:container_port:discovery_path
   -d, --discovery               Discovery
-                                  format: <zk|etcd>://<servers comma separated>/<base_path>
+                                  format: \zk|etcd\>://\<servers comma separated\>/\<base_path\>
   -r, --raw                     Add a raw jq query to configure dynamically a service
                                   format: service_name:jq_query
 
