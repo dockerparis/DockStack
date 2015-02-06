@@ -8,25 +8,25 @@ function error {
 }
 
 function help {
-    echo >&2 <<< EOF
-Usage: docker run -e SERVICE_HOST=\<host_ip\> [VOLUMES] nerve [ARGUMENTS]
-
-Arguments:
-  -s, --service                 Service
-                                  format: service_name:service_type:service_port:discovery_path | service_name:service_type:container_name:container_port:discovery_path
-  -d, --discovery               Discovery
-                                  format: \zk|etcd\>://\<servers comma separated\>/\<base_path\>
-  -r, --raw                     Add a raw jq query to configure dynamically a service
-                                  format: service_name:jq_query
-
-Volumes:
-  To be able to obtain automatically the container port you must share the following volumes with nerve:
-
-  -v /usr/bin/docker:/usr/bin/docker:ro 
-  -v /lib64/libdevmapper.so.1.02:/lib/libdevmapper.so.1.02:ro 
-  -v  /var/run/docker.sock:/var/run/docker.sock
-
-EOF
+#    echo >&2 <<< EOF
+#Usage: docker run -e SERVICE_HOST=\<host_ip\> [VOLUMES] nerve [ARGUMENTS]
+#
+#Arguments:
+#  -s, --service                 Service
+#                                  format: service_name:service_type:service_port:discovery_path | service_name:service_type:container_name:container_port:discovery_path
+#  -d, --discovery               Discovery
+#                                  format: \zk|etcd\>://\<servers comma separated\>/\<base_path\>
+#  -r, --raw                     Add a raw jq query to configure dynamically a service
+#                                  format: service_name:jq_query
+#
+#Volumes:
+#  To be able to obtain automatically the container port you must share the following volumes with nerve:
+#
+#  -v /usr/bin/docker:/usr/bin/docker:ro 
+#  -v /lib64/libdevmapper.so.1.02:/lib/libdevmapper.so.1.02:ro 
+#  -v  /var/run/docker.sock:/var/run/docker.sock
+#
+#EOF
     exit 1
 }
 
