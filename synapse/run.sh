@@ -142,4 +142,8 @@ done
 
 /haproxy.sh start &
 
-synapse -c /config.json
+while true
+do
+    echo "Starting synapse..."
+    synapse -c /config.json
+done
