@@ -1,6 +1,8 @@
-FROM dockerfile/ubuntu
+FROM ubuntu:14.04
 
 RUN \
+	apt-get update && \
+	apt-get install -y software-properties-common && \
 	add-apt-repository ppa:vbernat/haproxy-1.5 && \
 	apt-get update && \
 	apt-get install -y build-essential ruby-dev haproxy jq && \
