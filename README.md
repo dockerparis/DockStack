@@ -1,1 +1,1 @@
-## Project has moved [Here](https://github.com/themecloud/dockstack).
+## The Dockstack project has moved [here](https://github.com/themecloud/dockstack).
