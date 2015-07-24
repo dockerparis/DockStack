@@ -52,7 +52,7 @@ Here the magic happens! (Running a mysql image, as it carries by default mysql-c
 host2 $ docker run -ti --rm --link synapse:db mysql:latest mysql -u root -h db -p
 ```
 
-The connection is proxified transparently by HAProxy
+The connection is transparently proxified by HAProxy
 
 ##TODO
 Create more service config files and examples ready to use
